@@ -11,5 +11,7 @@ window.COIN_DASH = {
     { name: 'Hard', droneCount: 5, droneSpeed: 140 }
   ],
   defaultDifficulty: 1,
-  colors: { background: 0x101c31, player: 0x71e8ce, coin: 0xffd166, drone: 0xff657a }
+  powerupEvery: 12,
+  shieldSeconds: 5,
+  colors: { background: 0x101c31, player: 0x71e8ce, coin: 0xffd166, drone: 0xff657a, powerup: 0x4cc9f0 }
 };

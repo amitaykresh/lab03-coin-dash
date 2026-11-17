@@ -37,6 +37,7 @@ class CoinDash extends Phaser.Scene {
     this.highScore = loadHighScore();
     this.finished = false;
     this.paused = false;
+    this.shieldUntil = 0;
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
@@ -64,7 +65,21 @@ class CoinDash extends Phaser.Scene {
       this.score++;
       this.placeCoin();
     });
-    this.physics.add.overlap(this.player, this.drones, () => this.finish('A drone caught you!'));
+    this.physics.add.overlap(this.player, this.drones, () => {
+      if (this.time.now < this.shieldUntil) return;
+      this.finish('A drone caught you!');
+    });
+    // Shield power-up: a diamond that appears every powerupEvery seconds if none is on the field.
+    this.powerup = this.add.rectangle(0, 0, 18, 18, c.colors.powerup).setAngle(45).setVisible(false);
+    this.physics.add.existing(this.powerup);
+    this.powerup.body.enable = false;
+    this.physics.add.overlap(this.player, this.powerup, () => {
+      if (this.finished || !this.powerup.visible) return;
+      this.powerup.setVisible(false);
+      this.powerup.body.enable = false;
+      this.shieldUntil = this.time.now + c.shieldSeconds * 1000;
+    });
+    this.powerupTimer = this.time.addEvent({ delay: c.powerupEvery * 1000, loop: true, callback: () => this.spawnPowerup() });
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
     this.input.keyboard.on('keydown-R', () => this.scene.restart());
@@ -90,6 +105,19 @@ class CoinDash extends Phaser.Scene {
     this.coin.body.reset(x, y);
   }
 
+  spawnPowerup() {
+    if (this.finished || this.powerup.visible) return;
+    const c = COIN_DASH;
+    let x, y;
+    do {
+      x = Phaser.Math.Between(25, c.width - 25);
+      y = Phaser.Math.Between(70, c.height - 25);
+    } while (Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y) < 80);
+    this.powerup.setPosition(x, y).setVisible(true);
+    this.powerup.body.enable = true;
+    this.powerup.body.reset(x, y);
+  }
+
   togglePause() {
     if (this.finished) return;
     const c = COIN_DASH;
@@ -97,6 +125,7 @@ class CoinDash extends Phaser.Scene {
       this.paused = true;
       this.pausedAt = this.time.now;
       this.physics.pause();
+      this.powerupTimer.paused = true;
       this.pauseOverlay = this.add.container(c.width / 2, c.height / 2, [
         this.add.rectangle(0, 0, 460, 90, 0x0a1120, 0.95),
         this.add.text(0, 0, 'PAUSED — press P to resume',
@@ -104,8 +133,11 @@ class CoinDash extends Phaser.Scene {
       ]);
     } else {
       this.paused = false;
-      // Push the deadline back so paused time does not count against the round.
-      this.deadline += this.time.now - this.pausedAt;
+      // Push the deadline (and an active shield) back so paused time does not count.
+      const pausedFor = this.time.now - this.pausedAt;
+      this.deadline += pausedFor;
+      if (this.shieldUntil > this.pausedAt) this.shieldUntil += pausedFor;
+      this.powerupTimer.paused = false;
       this.physics.resume();
       this.pauseOverlay.destroy();
     }
@@ -120,7 +152,11 @@ class CoinDash extends Phaser.Scene {
     const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(COIN_DASH.playerSpeed);
     this.player.body.setVelocity(direction.x, direction.y);
     const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
-    this.hud.setText(`Coins: ${this.score}     Best: ${this.highScore}     ${this.difficulty.name.padEnd(6)}     Time: ${seconds}s`);
+    const shield = Math.max(0, Math.ceil((this.shieldUntil - this.time.now) / 1000));
+    if (shield > 0) this.player.setStrokeStyle(4, COIN_DASH.colors.powerup);
+    else this.player.setStrokeStyle();
+    this.hud.setText(`Coins: ${this.score}  Best: ${this.highScore}  ${this.difficulty.name}  Time: ${seconds}s`
+      + (shield > 0 ? `  Shield: ${shield}s` : ''));
     if (seconds === 0) this.finish('Time is up!');
   }
 
